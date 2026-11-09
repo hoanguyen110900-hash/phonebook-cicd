@@ -1,5 +1,24 @@
 Link to application
-https://phonebook-lwms.onrender.com
+https://phonebook-cicd-yjaq.onrender.com
+
+## Render setup
+
+Create a **Web Service** using the repository root (leave **Root Directory**
+empty), with these settings:
+
+- **Build Command:** `npm ci && npm run build`
+- **Start Command:** `npm start`
+- **Environment:** set `MONGODB_URI` to your MongoDB connection string.
+
+The build script installs the frontend's build dependencies and creates
+`dist/index.html` and its assets. The `dist` directory is ignored by Git, so
+Render must build it on every deployment. GitHub Actions' build output is not
+transferred to Render. Installing only backend dependencies can leave the
+server running while `/` returns 404 because the frontend files are missing.
+
+For an existing service, update these settings and deploy the latest commit.
+If the new service replaces the old one, update the GitHub Actions
+`RENDER_DEPLOY_HOOK` secret to the new service's deploy hook.
 
 GitHub Actions runs the CI pipeline on pushes and pull requests to `main`,
 and it can also be started manually from the Actions tab. It uses Node.js 24,
@@ -40,7 +59,7 @@ In GitHub, open **Settings → Secrets and variables → Actions** and add:
 The deploy job confirms Render accepted the deployment request; it does not
 wait for the application to become live. The success notification reflects
 this. Render must have its own build command configured, for example
-`npm ci && npm ci --prefix frontend && npm run build:ui`, and start command
+`npm ci && npm run build`, and start command
 `npm start`. Deploying a specific commit through a Render deploy hook disables
 Render's automatic deploys, so subsequent deployments go through this workflow.
 See [Render deploy hooks](https://render.com/docs/deploy-hooks) and

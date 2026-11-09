@@ -79,15 +79,15 @@ jobs:
     steps:
       - name: Trigger Render deployment
         env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
-          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
-            echo 'Missing RENDER_DEPLOY_HOOK_URL repository secret.'
+          if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+            echo 'Missing RENDER_DEPLOY_HOOK repository secret.'
             exit 1
           fi
           curl --fail --silent --show-error --max-time 60 \
             --get --data-urlencode "ref=$GITHUB_SHA" \
-            "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+            "$RENDER_DEPLOY_HOOK" > /dev/null
 
   tag_release:
     needs: deploy

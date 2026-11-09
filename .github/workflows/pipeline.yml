@@ -1,0 +1,107 @@
+name: CI pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+      - name: Check backend style
+        run: npm run lint
+      - name: Check frontend style
+        run: npm --prefix frontend run lint
+      - name: Test backend
+        run: npm test
+      - name: Test frontend
+        run: npm --prefix frontend test
+      - name: Build application
+        run: npm run build:ui
+
+  deploy:
+    needs: build_and_test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deployment
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo 'Missing RENDER_DEPLOY_HOOK_URL repository secret.'
+            exit 1
+          fi
+          curl --fail --silent --show-error --max-time 60 \
+            --get --data-urlencode "ref=$GITHUB_SHA" \
+            "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+
+  tag_release:
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Tag release commit
+        run: |
+          tag="release-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          git tag "$tag" "$GITHUB_SHA"
+          git push origin "refs/tags/$tag"
+
+  notify_failure:
+    needs: [build_and_test, deploy, tag_release]
+    if: ${{ always() && contains(needs.*.result, 'failure') && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure notification to Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo 'Missing DISCORD_WEBHOOK repository secret.'
+            exit 1
+          fi
+          jq -n --arg content "❌ Pipeline failed for $GITHUB_REPOSITORY ($GITHUB_SHA). Details: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{content: $content, allowed_mentions: {parse: []}}' > payload.json
+          curl --fail --silent --show-error --max-time 30 \
+            -H 'Content-Type: application/json' \
+            --data-binary @payload.json "$DISCORD_WEBHOOK"
+
+  notify_success:
+    needs: [build_and_test, deploy, tag_release]
+    if: ${{ success() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send success notification to Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo 'Missing DISCORD_WEBHOOK repository secret.'
+            exit 1
+          fi
+          jq -n --arg content "✅ Checks passed, Render deployment triggered, and release-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT} tagged for $GITHUB_REPOSITORY. Details: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{content: $content, allowed_mentions: {parse: []}}' > payload.json
+          curl --fail --silent --show-error --max-time 30 \
+            -H 'Content-Type: application/json' \
+            --data-binary @payload.json "$DISCORD_WEBHOOK"

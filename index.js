@@ -1,8 +1,18 @@
 require('dotenv').config()
 const express = require('express')
 const morgan = require('morgan')
+const mongoose = require('mongoose')
 const Person = require('./models/person')
 const app = express()
+
+console.log('connecting to Mongo')
+mongoose.connect(process.env.MONGODB_URI, { family: 4 })
+  .then(() => {
+    console.log('connected to MongoDB')
+  })
+  .catch(error => {
+    console.log('error connecting to MongoDB:', error.message)
+  })
 
 
 app.use(express.json())

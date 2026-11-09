@@ -34,7 +34,7 @@ jobs are skipped. Cancelled runs do not send notifications.
 
 In GitHub, open **Settings → Secrets and variables → Actions** and add:
 
-- `RENDER_DEPLOY_HOOK_URL`: the deploy hook URL from the Render service's Settings.
+- `RENDER_DEPLOY_HOOK`: the deploy hook URL from the Render service's Settings.
 - `DISCORD_WEBHOOK`: the Discord channel's webhook URL.
 
 The deploy job confirms Render accepted the deployment request; it does not

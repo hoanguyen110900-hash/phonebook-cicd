@@ -38,9 +38,50 @@ jobs:
       - name: Build application
         run: npm run build:ui
 
-  deploy:
-    needs: build_and_test
+  release_check:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Check commit messages for release skip marker
+        id: check
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const commits = context.payload.commits ?? [];
+            let skip = commits.some(commit => commit.message.includes('#skip'));
+            const checkedPulls = new Set();
+            // Include the current SHA for manually dispatched runs as well.
+            const shas = new Set([context.sha, ...commits.map(commit => commit.id)]);
+            for (const sha of shas) {
+              if (skip) break;
+              const pulls = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
+                ...context.repo, commit_sha: sha, per_page: 100
+              });
+              for (const pull of pulls) {
+                if (!pull.merged_at || pull.base.ref !== 'main' || checkedPulls.has(pull.number)) continue;
+                checkedPulls.add(pull.number);
+                const pullCommits = await github.paginate(github.rest.pulls.listCommits, {
+                  ...context.repo, pull_number: pull.number, per_page: 100
+                });
+                // GitHub limits this endpoint to 250 commits; fail closed if truncated.
+                if (pullCommits.length >= 250) {
+                  throw new Error(`Cannot safely check all commits in PR #${pull.number}.`);
+                }
+                skip = pullCommits.some(commit => commit.commit.message.includes('#skip'));
+                if (skip) break;
+              }
+            }
+            core.setOutput('skip', String(skip));
+            core.info(skip ? 'Skipping production deployment and release tag (#skip found).' : 'Release allowed.');
+
+  deploy:
+    needs: [build_and_test, release_check]
+    if: needs.release_check.outputs.skip == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render deployment
@@ -69,7 +110,7 @@ jobs:
           git push origin "refs/tags/$tag"
 
   notify_failure:
-    needs: [build_and_test, deploy, tag_release]
+    needs: [build_and_test, release_check, deploy, tag_release]
     if: ${{ always() && contains(needs.*.result, 'failure') && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:

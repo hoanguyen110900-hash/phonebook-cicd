@@ -11,6 +11,7 @@
     "dev": "node --watch index.js",
     "test": "node --test tests/*.test.js",
     "lint": "eslint .",
+    "build": "npm ci --prefix frontend --include=dev && npm run build:ui",
     "build:ui": "npm --prefix frontend run build && rm -rf dist && cp -r frontend/dist dist",
     "deploy:full": "npm run build:ui && git add . && git commit -m uibuild && git push"
   },

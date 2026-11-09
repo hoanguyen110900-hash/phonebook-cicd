@@ -1,5 +1,6 @@
 require('dotenv').config()
 const express = require('express')
+const path = require('node:path')
 const morgan = require('morgan')
 const mongoose = require('mongoose')
 const Person = require('./models/person')
@@ -16,7 +17,7 @@ mongoose.connect(process.env.MONGODB_URI, { family: 4 })
 
 
 app.use(express.json())
-app.use(express.static('dist'))
+app.use(express.static(path.join(__dirname, 'dist')))
 morgan.token('body', (req) => {
   return req.method === 'POST'
     ? JSON.stringify(req.body)

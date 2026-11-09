@@ -10,11 +10,45 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
+    outputs:
+      skip_release: ${{ steps.release_policy.outputs.result }}
     steps:
+      - name: Check release skip marker
+        id: release_policy
+        if: github.event_name != 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const hasSkip = message => message.includes('#skip');
+            const commits = context.payload.commits || [];
+            if (commits.some(commit => hasSkip(commit.message))) return true;
+
+            const { data: head } = await github.rest.repos.getCommit({
+              ...context.repo,
+              ref: context.sha,
+            });
+            if (hasSkip(head.commit.message)) return true;
+
+            // Read original PR commits even when a squash merge rewrites the message.
+            const pulls = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
+              ...context.repo,
+              commit_sha: context.sha,
+              per_page: 100,
+            });
+            for (const pull of pulls.filter(pull => pull.merged_at && pull.base.ref === 'main')) {
+              const prCommits = await github.paginate(github.rest.pulls.listCommits, {
+                ...context.repo,
+                pull_number: pull.number,
+                per_page: 100,
+              });
+              if (prCommits.some(commit => hasSkip(commit.commit.message))) return true;
+            }
+            return false;
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
@@ -40,7 +74,7 @@ jobs:
 
   deploy:
     needs: build_and_test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.build_and_test.outputs.skip_release == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Render deployment

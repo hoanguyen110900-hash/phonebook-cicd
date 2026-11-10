@@ -1,6 +1,17 @@
 Link to application
 https://phonebook-cicd-yjaq.onrender.com
 
+## Local database
+
+Set `MONGODB_URI` in `.env` to a connection string that includes the database
+name, for example `mongodb+srv://<username>:<password>@<cluster>/phonebook`.
+Without a database name, MongoDB uses `test`, which can make `/api/persons`
+return `[]` even when your contacts exist in `phonebook.people`.
+The API reads MongoDB; it does not load `frontend/db.json`.
+
+Restart `npm run dev` after changing `.env`, then open
+`http://localhost:3001/api/persons`.
+
 ## Render setup
 
 Create a **Web Service** using the repository root (leave **Root Directory**

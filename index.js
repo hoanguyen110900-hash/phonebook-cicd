@@ -25,8 +25,12 @@ app.use(
   morgan(':method :url :status :res[content-length] - :response-time ms :body'),
 )
 
-app.use('/', () => {
-  console.log('App started')
+app.get('/', (request, response, next) => {
+  Person.find({})
+    .then((person) => {
+      response.json(person)
+    })
+    .catch((error) => next(error))
 })
 
 ///Get length
